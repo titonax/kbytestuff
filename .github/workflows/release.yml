@@ -53,6 +53,13 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$RELEASE_VERSION" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_VERSION" >/dev/null 2>&1; then
+            tag_commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_VERSION" --jq .sha)
+            if [[ "$tag_commit" != "$SOURCE_SHA" ]]; then
+              echo 'Existing tag points to a different commit; refusing to relabel binaries.' >&2
+              exit 1
+            fi
+          fi
           for variant in offline update-notifications; do
             test -s "artifacts/WandEnhancer-$RELEASE_VERSION-$variant.zip"
             test -s "artifacts/WandEnhancer-$RELEASE_VERSION-$variant.exe"

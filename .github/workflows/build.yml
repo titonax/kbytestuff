@@ -88,10 +88,11 @@ jobs:
           } | ConvertTo-Json | Set-Content package/build-info.json -Encoding utf8
           Compress-Archive -Path package/* -DestinationPath "artifacts/WandEnhancer-$version-$env:VARIANT.zip"
           Copy-Item package/WandEnhancer.exe "artifacts/WandEnhancer-$version-$env:VARIANT.exe"
-          Get-ChildItem artifacts -File | ForEach-Object {
+          $checksums = @(Get-ChildItem artifacts -File | ForEach-Object {
             $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            "$hash  $($_.Name)" | Add-Content "artifacts/SHA256-$env:VARIANT.txt" -Encoding ascii
-          }
+            "$hash  $($_.Name)"
+          })
+          [IO.File]::WriteAllText((Join-Path (Get-Location) "artifacts/SHA256-$env:VARIANT.txt"), ($checksums -join "`n") + "`n", [Text.Encoding]::ASCII)
       - uses: actions/upload-artifact@v6
         with:
           name: WandEnhancer-${{ matrix.variant }}
