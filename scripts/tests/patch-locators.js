@@ -9,8 +9,8 @@ const handlers = {
   registerReducer() {},
 };
 handlers.registerHandler("ACTION_CHECK_FOR_UPDATE", () => true);
-handlers.registerReducer("ACTION_SET_ACCOUNT", function reduce(state, account) {
-  return { ...state, account: account };
+handlers.registerReducer("ACTION_SET_ACCOUNT", function reduce(state, accountValue) {
+  return { ...state, account: accountValue };
 });
 
 class SyntheticAccount {
