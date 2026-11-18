@@ -21,6 +21,8 @@ ILSpy command line 11.2.0.10050 reconstructed the three C# types with the CSharp
 
 The recovered implementation comes from 2.1.1.0 and is combined with the available upstream 2.2.1.0 tree. Compiling and running the project's regression gates is required to establish compatibility. Passing those gates does not establish compatibility with every current Wand installation. No original Wand installation or proprietary extracted bundle was used in this recovery.
 
+The first Actions build compiled both variants and passed the desktop checks, then exposed another missing file: `scripts/tests/patch-locators.js`. A new synthetic fixture restores the existing prettified/minified parser checks. It is newly written test input, not a recovered original or an extracted proprietary bundle.
+
 ## Static evidence
 
 REA artifact inspection: offline `ev_acae545aa865dc4313e080b43ecd230aba636facd03da1a834f991793a4ac9a8`; update `ev_ef856116b152f5297404d702368605379eb58e3a36e7ffca64146d939b6a2904`. Selected-member evidence `ev_4408d40adfd2d03416bcddc4b50e2e81d94c15186ab333dc1b5a33388ce3d733` observes all three recovered types, the notifier and constants in the update binary. REA metadata inspection did not execute either target; C# reconstruction is a separate ILSpy inference.
