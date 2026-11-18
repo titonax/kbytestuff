@@ -73,7 +73,7 @@ jobs:
           $version = $env:RELEASE_VERSION
           if (!$version) {
             $text = Get-Content WandEnhancer/Properties/AssemblyInfo.cs -Raw
-            $version = [regex]::Match($text, 'AssemblyVersion\("([^"]+)"\)').Groups[1].Value
+            $version = [regex]::Match($text, '(?m)^\s*\[assembly:\s*AssemblyVersion\("([^"]+)"\)\]').Groups[1].Value
           }
           if ($version -notmatch '^v?\d+\.\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw 'Invalid version' }
           New-Item -ItemType Directory -Path package, artifacts | Out-Null
