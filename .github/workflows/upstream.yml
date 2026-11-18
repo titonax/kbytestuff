@@ -1,6 +1,9 @@
 name: Update from upstream and publish
 
 on:
+  push:
+    branches: [master]
+    paths: ['.github/workflows/upstream.yml']
   schedule:
     - cron: '23 7 * * *'
   workflow_dispatch:
