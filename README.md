@@ -6,8 +6,10 @@
 
 </div>
 
+> **titonax/kbytestuff fork:** automated offline and update-notifications builds and fork Releases are described in [FORK_AUTOMATION.md](FORK_AUTOMATION.md). These are unofficial builds. Five missing files were reconstructed from the owner's saved 2.1.1.0 executables; see [RECOVERY.md](RECOVERY.md) for provenance and validation limits.
+
 > [!WARNING]
-> **DMCA notice.** On 2026-11-10 GitHub received a DMCA takedown notice for several files of this repository. The files named in the notice were removed from the repository and its history, so the project does not build from this repository at the moment.
+> **Upstream DMCA notice.** On 2026-11-10 GitHub received a DMCA takedown notice for several files of upstream. Upstream removed the named files and reported that it no longer builds. This fork's recovery is documented separately above.
 
 An open-source tool that extends the local client-side configuration of the Wand app and improves its UX.
 
