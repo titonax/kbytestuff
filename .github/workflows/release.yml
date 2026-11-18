@@ -1,55 +1,84 @@
-name: Release
+name: Publish offline and update release
 
 on:
   push:
-    tags:
-      - '*'
+    tags: ['[0-9]*', 'v[0-9]*']
+  workflow_call:
+    inputs:
+      source_ref:
+        type: string
+        required: true
+      version:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
 
 jobs:
-  publish-release:
-    if: github.repository == 'k1tbyte/Wand-Enhancer'
-    runs-on: windows-latest
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      source_ref: ${{ inputs.source_ref || github.sha }}
+      version: ${{ inputs.version || github.ref_name }}
+
+  publish:
+    if: github.repository == 'titonax/kbytestuff'
+    needs: build
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-
-    env:
-      RELEASE_VERSION: ${{ github.ref_name }}
-
     steps:
       - uses: actions/checkout@v5
         with:
-          fetch-depth: 0
+          ref: ${{ inputs.source_ref || github.sha }}
+          persist-credentials: false
 
-      - uses: pnpm/action-setup@v5
+      - uses: actions/download-artifact@v7
         with:
-          version: 10.17.0
+          pattern: WandEnhancer-*
+          path: artifacts
+          merge-multiple: true
 
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: web-panel/pnpm-lock.yaml
-
-      - name: Validate release metadata
-        shell: pwsh
-        run: ./scripts/validate-release-metadata.ps1 -ExpectedVersion $env:RELEASE_VERSION
-
-      - name: Extract release notes from changelog
-        shell: pwsh
-        run: ./scripts/get-changelog-section.ps1 -Version $env:RELEASE_VERSION -OutputPath release-notes.md
-
-      - name: Build release
-        shell: pwsh
-        run: ./build.ps1 -Configuration Release
-
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}
-          body_path: release-notes.md
-          files: CHANGELOG.md
-          fail_on_unmatched_files: true
-          # RC tags must not replace the latest stable release.
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          make_latest: ${{ !contains(github.ref_name, '-') }}
+      - name: Publish both tested variants
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+          SOURCE_SHA: ${{ inputs.source_ref || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_VERSION" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_VERSION" >/dev/null 2>&1; then
+            tag_commit=$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_VERSION" --jq .sha)
+            if [[ "$tag_commit" != "$SOURCE_SHA" ]]; then
+              echo 'Existing tag points to a different commit; refusing to relabel binaries.' >&2
+              exit 1
+            fi
+          fi
+          for variant in offline update-notifications; do
+            test -s "artifacts/WandEnhancer-$RELEASE_VERSION-$variant.zip"
+            test -s "artifacts/WandEnhancer-$RELEASE_VERSION-$variant.exe"
+            (cd artifacts && sha256sum --check "SHA256-$variant.txt")
+          done
+          {
+            echo "Unofficial, unsigned builds from $GITHUB_REPOSITORY at $SOURCE_SHA."
+            echo
+            echo "offline: update checks excluded. update: checks this fork's Releases; does not auto-install."
+            echo "ZIP archives include runtime files, license, changelog and build provenance."
+            echo
+            pwsh -File scripts/get-changelog-section.ps1 -Version "$RELEASE_VERSION"
+          } > release-notes.md
+          flags=()
+          if [[ "$RELEASE_VERSION" == *-* ]]; then flags+=(--prerelease --latest=false); else flags+=(--latest); fi
+          if ! gh release view "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" \
+              --target "$SOURCE_SHA" --title "WandEnhancer $RELEASE_VERSION (unofficial)" \
+              --notes-file release-notes.md --draft "${flags[@]}"
+          fi
+          gh release upload "$RELEASE_VERSION" artifacts/* --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --draft=false "${flags[@]}"

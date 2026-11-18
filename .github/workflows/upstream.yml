@@ -1,0 +1,106 @@
+name: Update from upstream and publish
+
+on:
+  push:
+    branches: [master]
+    paths: ['.github/workflows/upstream.yml']
+  schedule:
+    - cron: '23 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-release
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    if: github.repository == 'titonax/kbytestuff' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    outputs:
+      pending: ${{ steps.release.outputs.pending }}
+      version: ${{ steps.release.outputs.version }}
+      upstream_sha: ${{ steps.release.outputs.upstream_sha }}
+    steps:
+      - uses: actions/github-script@v8
+        id: release
+        with:
+          script: |
+            const upstream = { owner: 'k1tbyte', repo: 'Wand-Enhancer' };
+            const { data: release } = await github.rest.repos.getLatestRelease(upstream);
+            const version = release.tag_name;
+            if (!/^v?\d+\.\d+\.\d+\.\d+$/.test(version)) {
+              throw new Error(`Unsupported upstream stable version: ${version}`);
+            }
+            const { data: commit } = await github.rest.repos.getCommit({ ...upstream, ref: version });
+            let existing;
+            try {
+              ({ data: existing } = await github.rest.repos.getReleaseByTag({ ...context.repo, tag: version }));
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
+            const expected = ['offline', 'update-notifications'].flatMap(variant => [
+              `WandEnhancer-${version}-${variant}.exe`,
+              `WandEnhancer-${version}-${variant}.zip`,
+              `SHA256-${variant}.txt`
+            ]);
+            const complete = existing && !existing.draft && expected.every(name =>
+              existing.assets.some(asset => asset.name === name && asset.size > 0));
+            core.setOutput('pending', !complete);
+            core.setOutput('version', version);
+            core.setOutput('upstream_sha', commit.sha);
+            await core.summary.addHeading('Upstream release').addLink(version, release.html_url)
+              .addRaw(`\n\nSource: ${commit.sha}\n\n${complete ? 'Both variants already published.' : 'Update and build required; release only after both variants pass.'}\n`)
+              .write();
+
+  sync:
+    needs: detect
+    if: needs.detect.outputs.pending == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      source_ref: ${{ steps.sync.outputs.source_ref }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: master
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Merge released upstream source while preserving fork workflows
+        id: sync
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_SHA: ${{ needs.detect.outputs.upstream_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch https://github.com/k1tbyte/Wand-Enhancer.git "$UPSTREAM_SHA"
+          if ! git merge-base --is-ancestor "$UPSTREAM_SHA" HEAD; then
+            git merge --no-commit --no-ff "$UPSTREAM_SHA" || true
+            git restore --source=HEAD --staged --worktree .github/workflows
+            if [[ -n "$(git diff --name-only --diff-filter=U)" ]]; then
+              git diff --name-only --diff-filter=U
+              echo 'Upstream merge conflicts require manual resolution; nothing was pushed.' >&2
+              exit 1
+            fi
+            git rev-parse --verify MERGE_HEAD >/dev/null
+            git commit -m "chore: merge upstream $UPSTREAM_SHA"
+          fi
+          gh auth setup-git
+          git push origin HEAD:master
+          echo "source_ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  release:
+    needs: [detect, sync]
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      source_ref: ${{ needs.sync.outputs.source_ref }}
+      version: ${{ needs.detect.outputs.version }}

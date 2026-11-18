@@ -1,0 +1,101 @@
+name: Build offline and update executables
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_call:
+    inputs:
+      source_ref:
+        type: string
+        default: ''
+      version:
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [offline, update-notifications]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+          persist-credentials: false
+
+      - name: Check source completeness
+        shell: pwsh
+        run: |
+          [xml]$project = Get-Content WandEnhancer/WandEnhancer.csproj
+          $ns = [System.Xml.XmlNamespaceManager]::new($project.NameTable)
+          $ns.AddNamespace('m', 'http://schemas.microsoft.com/developer/msbuild/2003')
+          $missing = @($project.SelectNodes('//m:Compile|//m:Page|//m:ApplicationDefinition|//m:EmbeddedResource', $ns) | ForEach-Object {
+            $path = $_.Include
+            if ($path -and $path -notmatch '[*$]' -and !(Test-Path (Join-Path WandEnhancer $path))) { $path }
+          })
+          if ($missing.Count) {
+            throw "Source files absent from upstream; no executable can be published: $($missing -join ', '). See README.md."
+          }
+
+      - uses: pnpm/action-setup@v5
+        with:
+          version: 10.17.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-panel/pnpm-lock.yaml
+
+      - name: Validate metadata and build variant
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          ./scripts/validate-release-metadata.ps1 -ExpectedVersion $env:RELEASE_VERSION
+          ./build.ps1 -Configuration Release -EnableUpdateNotifications:($env:VARIANT -eq 'update-notifications')
+
+      - name: Package executable and provenance
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          $version = $env:RELEASE_VERSION
+          if (!$version) {
+            $text = Get-Content WandEnhancer/Properties/AssemblyInfo.cs -Raw
+            $version = [regex]::Match($text, '(?m)^\s*\[assembly:\s*AssemblyVersion\("([^"]+)"\)\]').Groups[1].Value
+          }
+          if ($version -notmatch '^v?\d+\.\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw 'Invalid version' }
+          New-Item -ItemType Directory -Path package, artifacts | Out-Null
+          Copy-Item WandEnhancer/bin/Release/* package -Recurse
+          Copy-Item LICENSE.md, CHANGELOG.md package
+          @{
+            repository = $env:GITHUB_REPOSITORY
+            commit = (git rev-parse HEAD)
+            version = $version
+            variant = $env:VARIANT
+            signed = $false
+          } | ConvertTo-Json | Set-Content package/build-info.json -Encoding utf8
+          Compress-Archive -Path package/* -DestinationPath "artifacts/WandEnhancer-$version-$env:VARIANT.zip"
+          Copy-Item package/WandEnhancer.exe "artifacts/WandEnhancer-$version-$env:VARIANT.exe"
+          $checksums = @(Get-ChildItem artifacts -File | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)"
+          })
+          [IO.File]::WriteAllText((Join-Path (Get-Location) "artifacts/SHA256-$env:VARIANT.txt"), ($checksums -join "`n") + "`n", [Text.Encoding]::ASCII)
+      - uses: actions/upload-artifact@v6
+        with:
+          name: WandEnhancer-${{ matrix.variant }}
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 30
