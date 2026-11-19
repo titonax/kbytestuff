@@ -1,8 +1,12 @@
-name: Publish offline and update release
+name: Generate artifact
 
 on:
-  push:
-    tags: ['[0-9]*', 'v[0-9]*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version matching the reviewed source and changelog (for example 2.2.1.0)
+        type: string
+        required: true
   workflow_call:
     inputs:
       source_ref:
@@ -21,10 +25,11 @@ concurrency:
 
 jobs:
   build:
+    if: github.ref == 'refs/heads/master'
     uses: ./.github/workflows/build.yml
     with:
       source_ref: ${{ inputs.source_ref || github.sha }}
-      version: ${{ inputs.version || github.ref_name }}
+      version: ${{ inputs.version }}
 
   publish:
     if: github.repository == 'titonax/kbytestuff'
@@ -47,7 +52,7 @@ jobs:
       - name: Publish both tested variants
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+          RELEASE_VERSION: ${{ inputs.version }}
           SOURCE_SHA: ${{ inputs.source_ref || github.sha }}
         shell: bash
         run: |
