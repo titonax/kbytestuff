@@ -40,7 +40,7 @@ jobs:
 
       - uses: actions/download-artifact@v7
         with:
-          pattern: WandEnhancer-*
+          pattern: Wagic-Builder-*
           path: artifacts
           merge-multiple: true
 
@@ -61,8 +61,8 @@ jobs:
             fi
           fi
           for variant in offline update-notifications; do
-            test -s "artifacts/WandEnhancer-$RELEASE_VERSION-$variant.zip"
-            test -s "artifacts/WandEnhancer-$RELEASE_VERSION-$variant.exe"
+            test -s "artifacts/Wagic-Builder-$RELEASE_VERSION-$variant.zip"
+            test -s "artifacts/Wagic-Builder-$RELEASE_VERSION-$variant.exe"
             (cd artifacts && sha256sum --check "SHA256-$variant.txt")
           done
           {
@@ -77,7 +77,7 @@ jobs:
           if [[ "$RELEASE_VERSION" == *-* ]]; then flags+=(--prerelease --latest=false); else flags+=(--latest); fi
           if ! gh release view "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" \
-              --target "$SOURCE_SHA" --title "WandEnhancer $RELEASE_VERSION (unofficial)" \
+              --target "$SOURCE_SHA" --title "Wagic Builder $RELEASE_VERSION (unofficial)" \
               --notes-file release-notes.md --draft "${flags[@]}"
           fi
           gh release upload "$RELEASE_VERSION" artifacts/* --repo "$GITHUB_REPOSITORY" --clobber
