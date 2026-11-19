@@ -42,12 +42,12 @@ jobs:
               if (error.status !== 404) throw error;
             }
             const expected = ['offline', 'update-notifications'].flatMap(variant => [
-              `WandEnhancer-${version}-${variant}.exe`,
-              `WandEnhancer-${version}-${variant}.zip`,
+              `Wagic-Builder-${version}-${variant}.exe`,
+              `Wagic-Builder-${version}-${variant}.zip`,
               `SHA256-${variant}.txt`
             ]);
             const complete = existing && !existing.draft && expected.every(name =>
-              existing.assets.some(asset => asset.name === name && asset.size > 0));
+              existing.assets.some(asset => (asset.name === name || asset.name === name.replace('Wagic-Builder-', 'WandEnhancer-')) && asset.size > 0));
             core.setOutput('pending', !complete);
             core.setOutput('version', version);
             core.setOutput('upstream_sha', commit.sha);

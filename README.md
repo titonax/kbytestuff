@@ -2,7 +2,7 @@
 
 ![logo](./assets/icon.svg)
 
-# WandEnhancer
+# Wagic Builder
 
 </div>
 
