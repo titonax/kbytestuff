@@ -82,6 +82,21 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git fetch https://github.com/k1tbyte/Wand-Enhancer.git "$UPSTREAM_SHA"
           if ! git merge-base --is-ancestor "$UPSTREAM_SHA" HEAD; then
+            mapfile -t bases < <(git merge-base --all HEAD "$UPSTREAM_SHA")
+            if [[ ${#bases[@]} -ne 1 ]]; then
+              echo 'Cannot determine a unique common ancestor; manual review required.' >&2
+              exit 1
+            fi
+            base=${bases[0]}
+            # Stop even on clean merges when both sides changed the same file.
+            overlap=$(comm -12 \
+              <(git diff --name-only "$base" HEAD -- . ':(exclude).github/workflows/**' | LC_ALL=C sort) \
+              <(git diff --name-only "$base" "$UPSTREAM_SHA" -- . ':(exclude).github/workflows/**' | LC_ALL=C sort))
+            if [[ -n "$overlap" ]]; then
+              echo 'Upstream and this fork changed the same files; manual review required:' >&2
+              printf '%s\n' "$overlap" >&2
+              exit 1
+            fi
             git merge --no-commit --no-ff "$UPSTREAM_SHA" || true
             git restore --source=HEAD --staged --worktree .github/workflows
             if [[ -n "$(git diff --name-only --diff-filter=U)" ]]; then
