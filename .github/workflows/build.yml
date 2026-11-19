@@ -1,7 +1,6 @@
-name: Build offline and update executables
+name: Build checks
 
 on:
-  workflow_dispatch:
   push:
     branches: [master]
   pull_request:
