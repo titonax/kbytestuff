@@ -1,3 +1,5 @@
+> Nota: esta descripción histórica está sustituida por [WORKFLOWS.md](WORKFLOWS.md). La actualización abre un PR para revisión y la generación y publicación son manuales.
+
 # AutomatizaciÃ³n de titonax/kbytestuff
 
 Este fork prepara dos variantes sin firma, con el mismo nÃºmero de versiÃ³n de upstream:
